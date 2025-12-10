@@ -1,0 +1,18 @@
+{
+  "scriptFile": "__init__.py",
+  "bindings": [
+    {
+      "type": "eventGridTrigger",
+      "name": "event",
+      "direction": "in"
+    },
+    {
+      "type": "serviceBus",
+      "name": "outputQueueItem",
+      "queueName": "ingestionqueue",
+      "entityType": "queue",
+      "connection": "ServiceBusConnection",
+      "direction": "out"
+    }
+  ]
+}

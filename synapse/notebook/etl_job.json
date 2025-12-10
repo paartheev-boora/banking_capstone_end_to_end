@@ -1,0 +1,461 @@
+{
+	"name": "etl_job",
+	"properties": {
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"bigDataPool": {
+			"referenceName": "parthSparkpool",
+			"type": "BigDataPoolReference"
+		},
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 2,
+			"runAsWorkspaceSystemIdentity": false,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "5f3f740c-5946-4874-9f29-d47c44a27614"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"enableDebugMode": false,
+			"language_info": {
+				"name": "python"
+			},
+			"a365ComputeOptions": {
+				"id": "/subscriptions/ce6686f3-dd0d-4254-8ae7-a0b837c329a4/resourceGroups/charitha-network/providers/Microsoft.Synapse/workspaces/parthworkspace/bigDataPools/parthSparkpool",
+				"name": "parthSparkpool",
+				"type": "Spark",
+				"endpoint": "https://parthworkspace.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/parthSparkpool",
+				"auth": {
+					"type": "AAD",
+					"authResource": "https://dev.azuresynapse.net",
+					"authHeader": null
+				},
+				"sparkVersion": "3.5",
+				"nodeCount": 10,
+				"cores": 4,
+				"memory": 28,
+				"extraHeader": null
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"# Daily ETL: Raw -> Silver -> Gold (SCD2 for DimCustomer, Type1 for DimAccount)\n",
+					"Purpose:\n",
+					"- Read separate silver folders (atm_silver, upi_silver, customer_silver)\n",
+					"- Normalize & clean\n",
+					"- DimCustomer = SCD Type-2 (Delta MERGE)\n",
+					"- DimAccount = Type-1 upsert\n",
+					"- DimDate = idempotent load\n",
+					"- FactTransactions = append / dedupe by TransactionID"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# -------------------- CONFIG - EDIT THESE --------------------\n",
+					"STORAGE_ACCOUNT = \"charithastorage123\"\n",
+					"SILVER_CONTAINER = \"silver\"\n",
+					"GOLD_CONTAINER = \"gold\"\n",
+					"\n",
+					"SILVER_ATM = f\"abfss://{SILVER_CONTAINER}@{STORAGE_ACCOUNT}.dfs.core.windows.net/atm_silver/\"\n",
+					"SILVER_UPI = f\"abfss://{SILVER_CONTAINER}@{STORAGE_ACCOUNT}.dfs.core.windows.net/upi_silver/\"\n",
+					"SILVER_CUST = f\"abfss://{SILVER_CONTAINER}@{STORAGE_ACCOUNT}.dfs.core.windows.net/customer_silver/\"\n",
+					"\n",
+					"GOLD_BASE = f\"abfss://{GOLD_CONTAINER}@{STORAGE_ACCOUNT}.dfs.core.windows.net\"\n",
+					"GOLD_DIM_CUSTOMER = f\"{GOLD_BASE}/dim_customer/\"\n",
+					"GOLD_DIM_ACCOUNT  = f\"{GOLD_BASE}/dim_account/\"\n",
+					"GOLD_DIM_DATE     = f\"{GOLD_BASE}/dim_date/\"\n",
+					"GOLD_FACT_TXN     = f\"{GOLD_BASE}/fact_transactions/\"\n",
+					"\n",
+					"# Authentication options (choose one)\n",
+					"USE_MANAGED_IDENTITY = True   # set False if using storage account key\n",
+					"STORAGE_ACCOUNT_KEY = \"<paste_key_if_not_using_managed_identity>\"\n",
+					"\n",
+					"# Optional: temp path for staging if writing to serverless/external SQL later\n",
+					"TEMP_DIR = f\"{GOLD_BASE}/_temp/\"\n",
+					"\n",
+					"# business rules\n",
+					"ACCOUNT_ACTIVE_DAYS = 30   # days to consider an account active\n",
+					"\n",
+					"# ------------------------------------------------------------"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"from pyspark.sql import SparkSession\n",
+					"from pyspark.sql.functions import col\n",
+					"from delta.tables import DeltaTable\n",
+					"import pyspark.sql.functions as F\n",
+					"\n",
+					"# show spark session\n",
+					"spark\n",
+					"spark.conf.set(\"fs.azure.account.auth.type.charithastorage123.dfs.core.windows.net\", \"ManagedIdentity\")\n",
+					"\n",
+					"# configure credentials if not using managed identity\n",
+					"if not USE_MANAGED_IDENTITY:\n",
+					"    key = STORAGE_ACCOUNT_KEY\n",
+					"    spark.conf.set(f\"fs.azure.account.key.{STORAGE_ACCOUNT}.dfs.core.windows.net\", key)\n",
+					"else:\n",
+					"    # if using Managed Identity / Linked service the Synapse pool should have permissions;\n",
+					"    # no action required here. If using mssparkutils, you can get secrets via linked service.\n",
+					"    pass\n",
+					"\n",
+					"# optional: verify delta availability (Delta jars must be present on the pool)\n",
+					"try:\n",
+					"    _ = DeltaTable  # reference\n",
+					"    print(\"Delta available\")\n",
+					"except Exception as e:\n",
+					"    print(\"Delta not available on this pool. You must attach delta-core jars or use a pool with Delta.\")\n",
+					"    # you can still use parquet if delta not available; SCD2 would need different approach."
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"def read_silver(path):\n",
+					"    \"\"\"Prefer delta if present else parquet.\"\"\"\n",
+					"    try:\n",
+					"        return spark.read.format(\"delta\").load(path)\n",
+					"    except Exception:\n",
+					"        return spark.read.parquet(path)\n",
+					"\n",
+					"def ensure_delta_empty(path, example_df):\n",
+					"    \"\"\"Create an empty delta folder with schema if not exists.\"\"\"\n",
+					"    try:\n",
+					"        DeltaTable.forPath(spark, path)\n",
+					"    except Exception:\n",
+					"        example_df.limit(0).write.format(\"delta\").mode(\"overwrite\").save(path)\n",
+					"\n",
+					"def create_or_get_dt(path, example_df):\n",
+					"    \"\"\"Ensure table exists and return DeltaTable object.\"\"\"\n",
+					"    ensure_delta_empty(path, example_df)\n",
+					"    return DeltaTable.forPath(spark, path)"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# read silver\n",
+					"atm_raw = read_silver(SILVER_ATM)\n",
+					"upi_raw = read_silver(SILVER_UPI)\n",
+					"cust_raw = read_silver(SILVER_CUST)\n",
+					"\n",
+					"print(\"rows - atm:\", atm_raw.count(), \"upi:\", upi_raw.count(), \"cust:\", cust_raw.count())\n",
+					"\n",
+					"display(atm_raw.limit(5))\n",
+					"display(upi_raw.limit(5))\n",
+					"display(cust_raw.limit(5))"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"from pyspark.sql.functions import to_timestamp, lit\n",
+					"\n",
+					"# rename & type-cast ATM columns (adjust names according to your silver schema)\n",
+					"atm = atm_raw\n",
+					"\n",
+					"# typical expected fields — adapt to your actual columns\n",
+					"atm = atm.withColumn(\"TxnTimestamp\", to_timestamp(col(\"TxnTimestamp\"))) \\\n",
+					"         .withColumn(\"TransactionAmount\", col(\"TransactionAmount\").cast(\"double\")) \\\n",
+					"         .withColumn(\"Channel\", lit(\"ATM\"))\n",
+					"\n",
+					"# ensure expected columns (add missing as null)\n",
+					"expected_atm_cols = [\"TransactionID\",\"AccountNumber\",\"CustomerID\",\"TxnTimestamp\",\n",
+					"                     \"TransactionAmount\",\"TransactionType\",\"Channel\",\"Location\",\"Status\",\"DeviceID\"]\n",
+					"for c in expected_atm_cols:\n",
+					"    if c not in atm.columns:\n",
+					"        atm = atm.withColumn(c, lit(None))\n",
+					"\n",
+					"atm = atm.select(*expected_atm_cols)\n",
+					"display(atm.limit(5))"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"upi = upi_raw\n",
+					"\n",
+					"# harmonize column names & types\n",
+					"upi = upi.withColumn(\"TxnTimestamp\", to_timestamp(col(\"TxnTimestamp\"))) \\\n",
+					"         .withColumn(\"TransactionAmount\", col(\"Amount\").cast(\"double\")) \\\n",
+					"         .withColumn(\"Channel\", lit(\"UPI\"))\n",
+					"\n",
+					"# expected columns\n",
+					"expected_upi_cols = [\"TransactionID\",\"AccountNumber\",\"CustomerID\",\"TxnTimestamp\",\n",
+					"                     \"TransactionAmount\",\"TransactionType\",\"Channel\",\"GeoLocation\",\"Status\",\"DeviceID\"]\n",
+					"for c in expected_upi_cols:\n",
+					"    if c not in upi.columns:\n",
+					"        upi = upi.withColumn(c, lit(None))\n",
+					"\n",
+					"# harmonize name of transaction type\n",
+					"if \"transaction_type\" in upi.columns and \"TransactionType\" not in upi.columns:\n",
+					"    upi = upi.withColumnRenamed(\"transaction_type\", \"TransactionType\")\n",
+					"\n",
+					"upi = upi.select(*expected_upi_cols)\n",
+					"display(upi.limit(5))"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"cust = cust_raw\n",
+					"\n",
+					"cust = cust.withColumn(\"CreatedAt\", to_timestamp(col(\"CreatedAt\")))\n",
+					"\n",
+					"expected_cust_cols = [\"CustomerID\",\"Name\",\"Email\",\"Phone\",\"CreatedAt\"]\n",
+					"for c in expected_cust_cols:\n",
+					"    if c not in cust.columns:\n",
+					"        cust = cust.withColumn(c, lit(None))\n",
+					"\n",
+					"cust = cust.select(*expected_cust_cols)\n",
+					"display(cust.limit(5))"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# create delta paths with correct schema (if not exists)\n",
+					"ensure_delta_empty(GOLD_DIM_CUSTOMER, cust)\n",
+					"ensure_delta_empty(GOLD_DIM_ACCOUNT, atm.select(\"AccountNumber\",\"CustomerID\"))\n",
+					"ensure_delta_empty(GOLD_DIM_DATE, cust.select(F.to_date(\"CreatedAt\").alias(\"Date\")).limit(1))\n",
+					"ensure_delta_empty(GOLD_FACT_TXN, atm.limit(1))\n",
+					"\n",
+					"print(\"Gold delta skeletons created/verified.\")"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"from pyspark.sql.functions import current_timestamp\n",
+					"\n",
+					"# Source snapshot for customers (latest)\n",
+					"src_customer = cust.select(\"CustomerID\",\"Name\",\"Email\",\"Phone\",\"CreatedAt\") \\\n",
+					"                   .withColumn(\"StartDate\", current_timestamp()) \\\n",
+					"                   .withColumn(\"EndDate\", lit(None).cast(\"timestamp\")) \\\n",
+					"                   .withColumn(\"IsCurrent\", lit(1).cast(\"int\"))\n",
+					"\n",
+					"# Ensure Delta target has SCD columns\n",
+					"dt_cust = create_or_get_dt(GOLD_DIM_CUSTOMER, src_customer)\n",
+					"\n",
+					"# Build aliases & conditions\n",
+					"t = \"t\"; s = \"s\"\n",
+					"merge_cond = f\"{t}.CustomerID = {s}.CustomerID AND {t}.IsCurrent = 1\"\n",
+					"tracked_cols = [\"Name\",\"Email\",\"Phone\"]\n",
+					"change_cond = \" OR \".join([f\"COALESCE({t}.{c},'') <> COALESCE({s}.{c},'')\" for c in tracked_cols])\n",
+					"\n",
+					"# 1) expire existing current rows where tracked columns changed\n",
+					"dt_cust.alias(t).merge(\n",
+					"    src_customer.alias(s),\n",
+					"    merge_cond\n",
+					").whenMatchedUpdate(\n",
+					"    condition = change_cond,\n",
+					"    set = {\n",
+					"        \"EndDate\": \"current_timestamp()\",\n",
+					"        \"IsCurrent\": \"0\"\n",
+					"    }\n",
+					").whenNotMatchedInsertAll().execute()\n",
+					"\n",
+					"# 2) insert new current versions (new customers or changed ones)\n",
+					"curr = dt_cust.toDF().filter(col(\"IsCurrent\")==1).select(\"CustomerID\", *tracked_cols)\n",
+					"changes = src_customer.alias(\"s\").join(curr.alias(\"t\"), on=[col(\"s.CustomerID\")==col(\"t.CustomerID\")], how=\"left\") \\\n",
+					"            .filter( (col(\"t.CustomerID\").isNull()) | \n",
+					"                     ( (col(\"t.Name\") != col(\"s.Name\")) | (col(\"t.Email\") != col(\"s.Email\")) | (col(\"t.Phone\") != col(\"s.Phone\")) )\n",
+					"                   ).select(\"s.*\")\n",
+					"\n",
+					"if changes.count() > 0:\n",
+					"    to_insert = changes.withColumn(\"EndDate\", lit(None).cast(\"timestamp\")).withColumn(\"IsCurrent\", lit(1).cast(\"int\"))\n",
+					"    to_insert.write.format(\"delta\").mode(\"append\").save(GOLD_DIM_CUSTOMER)\n",
+					"\n",
+					"print(\"DimCustomer SCD2 merge complete.\")\n",
+					"display(DeltaTable.forPath(spark, GOLD_DIM_CUSTOMER).toDF().limit(10))"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# Determine account last transaction date from silver\n",
+					"from pyspark.sql.functions import to_date, max as spark_max, datediff, current_date, when\n",
+					"\n",
+					"atm_dates = atm.select(\"AccountNumber\", to_date(\"TxnTimestamp\").alias(\"TxnDate\"))\n",
+					"upi_dates = upi.select(\"AccountNumber\", to_date(\"TxnTimestamp\").alias(\"TxnDate\"))\n",
+					"last_seen = atm_dates.union(upi_dates).groupBy(\"AccountNumber\").agg(spark_max(\"TxnDate\").alias(\"LastTxnDate\"))\n",
+					"\n",
+					"# compute status\n",
+					"acc_status = last_seen.withColumn(\n",
+					"    \"Status\",\n",
+					"    when(datediff(current_date(), col(\"LastTxnDate\")) <= ACCOUNT_ACTIVE_DAYS, \"Active\").otherwise(\"Dormant\")\n",
+					")\n",
+					"\n",
+					"# Combine with existing account metadata (customer link if present)\n",
+					"src_account = acc_status.join(atm.select(\"AccountNumber\",\"CustomerID\").union(upi.select(\"AccountNumber\",\"CustomerID\")).dropDuplicates(),\n",
+					"                              on=\"AccountNumber\", how=\"left\") \\\n",
+					"                       .select(\"AccountNumber\",\"CustomerID\",\"LastTxnDate\",\"Status\")\n",
+					"\n",
+					"# upsert into delta dim account\n",
+					"ensure_delta_empty(GOLD_DIM_ACCOUNT, src_account)\n",
+					"dt_acc = DeltaTable.forPath(spark, GOLD_DIM_ACCOUNT)\n",
+					"\n",
+					"dt_acc.alias(\"t\").merge(\n",
+					"    src_account.alias(\"s\"),\n",
+					"    \"t.AccountNumber = s.AccountNumber\"\n",
+					").whenMatchedUpdate(\n",
+					"    set = {\n",
+					"        \"CustomerID\": \"s.CustomerID\",\n",
+					"        \"LastTxnDate\": \"s.LastTxnDate\",\n",
+					"        \"Status\": \"s.Status\"\n",
+					"    }\n",
+					").whenNotMatchedInsertAll().execute()\n",
+					"\n",
+					"print(\"DimAccount upsert complete.\")\n",
+					"display(DeltaTable.forPath(spark, GOLD_DIM_ACCOUNT).toDF().limit(10))"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"dates_df = atm.select(F.to_date(\"TxnTimestamp\").alias(\"Date\")) \\\n",
+					"              .union(upi.select(F.to_date(\"TxnTimestamp\").alias(\"Date\"))).distinct() \\\n",
+					"              .withColumn(\"DateSK\", date_format(col(\"Date\"), \"yyyyMMdd\").cast(\"int\")) \\\n",
+					"              .withColumn(\"Year\", date_format(col(\"Date\"), \"yyyy\").cast(\"int\")) \\\n",
+					"              .withColumn(\"Month\", date_format(col(\"Date\"), \"MM\").cast(\"int\")) \\\n",
+					"              .withColumn(\"Day\", date_format(col(\"Date\"), \"dd\").cast(\"int\"))\n",
+					"\n",
+					"ensure_delta_empty(GOLD_DIM_DATE, dates_df)\n",
+					"dt_date = DeltaTable.forPath(spark, GOLD_DIM_DATE)\n",
+					"dt_date.alias(\"t\").merge(\n",
+					"    dates_df.alias(\"s\"),\n",
+					"    \"t.DateSK = s.DateSK\"\n",
+					").whenNotMatchedInsertAll().execute()\n",
+					"\n",
+					"print(\"DimDate upsert complete.\")\n",
+					"display(dt_date.toDF().limit(5))"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"# unify ATM + UPI schema for fact ingestion\n",
+					"fact_atm = atm.selectExpr(\n",
+					"    \"TransactionID\",\n",
+					"    \"AccountNumber\",\n",
+					"    \"CustomerID\",\n",
+					"    \"TxnTimestamp\",\n",
+					"    \"TransactionAmount\",\n",
+					"    \"Channel\",\n",
+					"    \"Status\",\n",
+					"    \"Location as GeoLocation\",\n",
+					"    \"TransactionType\"\n",
+					")\n",
+					"fact_upi = upi.selectExpr(\n",
+					"    \"TransactionID\",\n",
+					"    \"AccountNumber\",\n",
+					"    \"CustomerID\",\n",
+					"    \"TxnTimestamp\",\n",
+					"    \"TransactionAmount\",\n",
+					"    \"Channel\",\n",
+					"    \"Status\",\n",
+					"    \"GeoLocation\",\n",
+					"    \"TransactionType\"\n",
+					")\n",
+					"\n",
+					"fact_union = fact_atm.unionByName(fact_upi, allowMissingColumns=True)\n",
+					"\n",
+					"# create delta if not exists\n",
+					"ensure_delta_empty(GOLD_FACT_TXN, fact_union)\n",
+					"dt_fact = DeltaTable.forPath(spark, GOLD_FACT_TXN)\n",
+					"\n",
+					"# Merge semantics: update if newer by TxnTimestamp, insert if not exists\n",
+					"merge_cond = \"t.TransactionID = s.TransactionID\"\n",
+					"dt_fact.alias(\"t\").merge(\n",
+					"    fact_union.alias(\"s\"),\n",
+					"    merge_cond\n",
+					").whenMatchedUpdate(\n",
+					"    condition = \"s.TxnTimestamp > t.TxnTimestamp\",\n",
+					"    set = {\n",
+					"        \"TxnTimestamp\": \"s.TxnTimestamp\",\n",
+					"        \"TransactionAmount\": \"s.TransactionAmount\",\n",
+					"        \"Channel\": \"s.Channel\",\n",
+					"        \"Status\": \"s.Status\",\n",
+					"        \"GeoLocation\": \"s.GeoLocation\",\n",
+					"        \"TransactionType\": \"s.TransactionType\",\n",
+					"        \"AccountNumber\": \"s.AccountNumber\",\n",
+					"        \"CustomerID\": \"s.CustomerID\"\n",
+					"    }\n",
+					").whenNotMatchedInsertAll().execute()\n",
+					"\n",
+					"print(\"FactTransactions upsert (dedupe) complete.\")\n",
+					"display(dt_fact.toDF().limit(10))"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"print(\"Counts:\")\n",
+					"print(\"DimCustomer:\", DeltaTable.forPath(spark, GOLD_DIM_CUSTOMER).toDF().count())\n",
+					"print(\"DimAccount:\", DeltaTable.forPath(spark, GOLD_DIM_ACCOUNT).toDF().count())\n",
+					"print(\"DimDate:\", DeltaTable.forPath(spark, GOLD_DIM_DATE).toDF().count())\n",
+					"print(\"FactTransactions:\", DeltaTable.forPath(spark, GOLD_FACT_TXN).toDF().count())"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"-- Switch to builtins (or default) first:\n",
+					"USE builtins;\n",
+					"\n",
+					"-- ATM gold view (if you wrote gold to parquet/delta you can point to it)\n",
+					"CREATE OR ALTER VIEW vw_FactTransactions AS\n",
+					"SELECT *\n",
+					"FROM OPENROWSET(\n",
+					"    BULK 'https://charithastorage123.dfs.core.windows.net/gold/fact_transactions/*.parquet',\n",
+					"    FORMAT='PARQUET'\n",
+					") AS rows;"
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"- Create a Synapse Pipeline with two Notebook activities:\n",
+					"   1) Notebook: this file's cells 1..7 (Silver step if you prefer split)\n",
+					"   2) Notebook: this file's cells 8..12 (Gold & DW)\n",
+					"  Or keep as single notebook and call it in pipeline.\n",
+					"\n",
+					"- Schedule the pipeline with a Time Trigger (daily at your preferred time).\n",
+					"\n",
+					"- Authentication to ADLS:\n",
+					"  * Easiest: give Spark pool managed identity \"Storage Blob Data Contributor\" on the storage account.\n",
+					"  * Alternative: set storage account key in spark.conf (less secure).\n",
+					"\n",
+					"- Delta on Synapse:\n",
+					"  * Ensure your Spark pool has Delta jars or use parquet fallback (SCD2 implemented with Delta MERGE requires Delta support)."
+				]
+			}
+		]
+	}
+}

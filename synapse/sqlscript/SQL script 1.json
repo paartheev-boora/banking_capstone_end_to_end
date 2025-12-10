@@ -1,0 +1,17 @@
+{
+	"name": "SQL script 1",
+	"properties": {
+		"content": {
+			"query": "IF NOT EXISTS (SELECT * FROM sys.external_file_formats WHERE name = 'SynapseParquetFormat') \n\tCREATE EXTERNAL FILE FORMAT [SynapseParquetFormat] \n\tWITH ( FORMAT_TYPE = PARQUET)\nGO\n\nIF NOT EXISTS (SELECT * FROM sys.external_data_sources WHERE name = 'gold_charithastorage123_dfs_core_windows_net') \n\tCREATE EXTERNAL DATA SOURCE [gold_charithastorage123_dfs_core_windows_net] \n\tWITH (\n\t\tLOCATION = 'abfss://gold@charithastorage123.dfs.core.windows.net' \n\t)\nGO\n\nCREATE EXTERNAL TABLE dbo.DimAccount (\n\t[AccountNumber] int,\n\t[AccountSK] bigint\n\t)\n\tWITH (\n\tLOCATION = 'DimAccount/part-00000-20eb0d99-7bba-413f-978a-6adb9bff2c88-c000.snappy.parquet',\n\tDATA_SOURCE = [gold_charithastorage123_dfs_core_windows_net],\n\tFILE_FORMAT = [SynapseParquetFormat]\n\t)\nGO\n\n\nSELECT TOP 100 * FROM dbo.DimAccount\nGO",
+			"metadata": {
+				"language": "sql"
+			},
+			"currentConnection": {
+				"databaseName": "banking_lake",
+				"poolName": "Built-in"
+			},
+			"resultLimit": 5000
+		},
+		"type": "SqlQuery"
+	}
+}

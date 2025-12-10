@@ -1,0 +1,25 @@
+{
+	"name": "banking_lake",
+	"properties": {
+		"Name": "banking_lake",
+		"EntityType": "DATABASE",
+		"Origin": {
+			"Type": "SPARK"
+		},
+		"Properties": {
+			"IsSyMSCDMDatabase": true
+		},
+		"Source": {
+			"Provider": "ADLS",
+			"Location": "abfss://gold@charithastorage123.dfs.core.windows.net/",
+			"Properties": {
+				"FormatType": "parquet",
+				"LinkedServiceName": "parthworkspace-WorkspaceDefaultStorage"
+			}
+		},
+		"PublishStatus": "PUBLISHED",
+		"ObjectVersion": 1,
+		"ObjectId": "c57a31e2-74cb-4440-923a-fad10da50fed"
+	},
+	"type": "DATABASE"
+}

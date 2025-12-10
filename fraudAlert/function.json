@@ -1,0 +1,25 @@
+{
+  "bindings": [
+    {
+      "type": "eventGridTrigger",
+      "name": "event",
+      "direction": "in"
+    },
+    {
+      "name": "outputQueueItem",
+      "type": "serviceBus",
+      "direction": "out",
+      "queueName": "fraud-notifications",
+      "connection": "ServiceBusConnection"
+    },
+    {
+      "name": "outputDocument",
+      "type": "cosmosDB",
+      "direction": "out",
+      "databaseName": "OperationalDB",
+      "collectionName": "FraudAlerts",
+      "createIfNotExists": true,
+      "connectionStringSetting": "CosmosDBConnection"
+    }
+  ]
+}

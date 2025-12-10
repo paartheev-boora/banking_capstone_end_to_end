@@ -1,0 +1,52 @@
+name: Deploy Azure Functions
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "EventGridTrigger/**"
+      - "ServiceBusQueueProcessor/**"
+      - "fraudalert/**"
+      - "requirements.txt"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Deploy EventGridTrigger
+      uses: Azure/functions-action@v1
+      with:
+        app-name: "charitha-eventgrid-func"
+        package: "./EventGridTrigger"
+
+    - name: Deploy ServiceBusQueueProcessor
+      uses: Azure/functions-action@v1
+      with:
+        app-name: "charitha-servicebus-func"
+        package: "./ServiceBusQueueProcessor"
+
+    - name: Deploy FraudAlert
+      uses: Azure/functions-action@v1
+      with:
+        app-name: "charitha-fraudalert-func"
+        package: "./fraudalert"
