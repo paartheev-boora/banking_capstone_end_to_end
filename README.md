@@ -197,5 +197,8 @@ Transforms raw data into clean, structured Silver tables by:
 - Applies **ETL performance optimizations** such as shuffle tuning to improve throughput.
 
 #### Pipeline
+####### Pipeline workflow which triggers for 
+<img width="949" height="318" alt="image" src="https://github.com/user-attachments/assets/c867ccb4-ea74-460e-a121-e27f6b6458e0" />
+
 
 
