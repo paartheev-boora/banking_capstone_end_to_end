@@ -198,7 +198,23 @@ Transforms raw data into clean, structured Silver tables by:
 
 #### Pipeline
 ####### Pipeline workflow which triggers for 
-<img width="949" height="318" alt="image" src="https://github.com/user-attachments/assets/c867ccb4-ea74-460e-a121-e27f6b6458e0" />
+
+----
+
+## Day 4 
+#### Created a Event Grid Trigger for fraud Alerts 
+#####  Fraud Detection Rules Applied
+
+#####  High-Value Transaction
+- **ATM** → amount **> ₹50,000**
+- **UPI** → amount **> ₹1,00,000**
+
+#####  Unusual Location
+- Flags transactions where there is a **large geolocation jump** compared to the customer’s last known location.
+  <img width="1906" height="810" alt="image" src="https://github.com/user-attachments/assets/bed521f3-ad35-4e92-9799-52d6951ed396" />
+  
+
+
 
 
 
