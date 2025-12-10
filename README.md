@@ -142,7 +142,7 @@ Detects rapid withdrawal patterns:
 
 ---
 
-### 🔌 **1. Spark & Storage Initialization**
+### **1. Spark & Storage Initialization**
 - Initializes a Spark session using the **Cosmos DB Spark Connector**.
 - Connects to **ADLS Gen2** using **shared key authentication** for secure, controlled access.
 
@@ -157,13 +157,7 @@ Loads raw datasets from Cosmos DB containers:
 
 ---
 
-### ✔️ **3. Data Validation**
-- Performs record-level validation using **row counts** on loaded DataFrames.
-- Ensures data completeness before processing.
-
----
-
-### 🥈 **4. Silver Layer Transformation**
+###  **4. Silver Layer Transformation**
 Transforms raw data into clean, structured Silver tables by:
 
 - Renaming columns for consistency  
@@ -173,24 +167,8 @@ Transforms raw data into clean, structured Silver tables by:
 )  
 - Casting columns to correct data types (timestamps, numeric fields, etc.)
 - Joining with customer profiles to **detect anomalies** such as mismatched geo-locations.
-- Flagging suspicious and fraudulent activity.
-
----
-
-### 🥇 **5. Gold Layer Transformation**
-Standardizes and aggregates transformed data:
-
-- Unifies **ATM & UPI schemas** into common formats.
-- Generates:
-  - **FactTransactions** – enriched transaction-level fact table  
-  - **FactFraudDetection** – logs all fraud-flagged events  
-  - **FactCustomerActivity** – captures UPI customer behavior with derived activity types  
-
----
-
-### 📦 **6. Optimized Storage Output**
-- Writes and **overwrites** transformed datasets as **Parquet files** into the ADLS Gold container.
-- Enables efficient querying for analytics and reporting workloads.
+- Flagging suspicious and fraudulent activity.  
+<img width="1576" height="415" alt="silver data in store" src="https://github.com/user-attachments/assets/ced23820-1322-4621-8ea7-9417bb6f69d4" />
 
 ---
 ## 📅 Day 3: Synapse DW Schema and ETL Setup
@@ -207,20 +185,8 @@ Standardizes and aggregates transformed data:
   - **FactFraudDetection**  
   - **FactCustomerActivity**
 - Uses **OPENROWSET** and auto-generated SQL to bulk load data from ADLS Parquet into Synapse.
+<img width="1560" height="909" alt="synapse views" src="https://github.com/user-attachments/assets/42a6d9ba-3ab3-4838-9661-57ab084aaadb" />
 
----
-
-### 🚀 **2. PySpark Initialization for ETL**
-- Initializes **PySpark** in Synapse notebook.  
-- Connects to Cosmos DB using **Cosmos DB Spark connector**.  
-- Authenticates to ADLS Gen2 using **shared key** for secure data ingestion.
-
----
-
-### 📥 **3. Raw Data Loading**
-- Loads source data directly from Cosmos DB collections, e.g.:  
-  ```python
-  atm_raw = spark.read.format("cosmos.oltp")...
 
 
 
