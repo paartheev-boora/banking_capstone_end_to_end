@@ -187,8 +187,15 @@ Transforms raw data into clean, structured Silver tables by:
 - Uses **OPENROWSET** and auto-generated SQL to bulk load data from ADLS Parquet into Synapse.
 <img width="1560" height="909" alt="synapse views" src="https://github.com/user-attachments/assets/42a6d9ba-3ab3-4838-9661-57ab084aaadb" />
 
+### 2. Timer trigger using the synapse Notebook.
+#### 🧠 Code Approach — High-Level Summary
 
+- Sets up **Synapse DW** with dimensional tables (DimCustomer, DimAccount, FactTransactions, FactFraudDetection, FactCustomerActivity) using SQL and OPENROWSET for Parquet loading.
+- Initializes **PySpark** with Cosmos DB connector and ADLS authentication for ingesting data.
+- Reads **raw ATM, UPI, and Customer** collections from Cosmos DB.
+- Transforms data into **Silver/Gold layers** by standardizing schemas, joining with dimensions, and writing to ADLS.
+- Applies **ETL performance optimizations** such as shuffle tuning to improve throughput.
 
-
+#### Pipeline
 
 
