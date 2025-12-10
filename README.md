@@ -229,7 +229,8 @@ Or can also create a private endpoint.
 ## Day 5
 #### Visulaization
  
-  
+  ![WhatsApp Image 2025-12-10 at 10 54 19 PM](https://github.com/user-attachments/assets/bd897043-6e4b-443a-95bb-bf96f4443851)
+
   
 
 
