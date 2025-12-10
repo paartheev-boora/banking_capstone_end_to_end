@@ -137,7 +137,63 @@ Detects rapid withdrawal patterns:
 - **Within 5 minutes**  
 - **From the same account**
 
+### PySpark ETL for Silver and Gold Layers
+#### 🧠 Code Approach
+
 ---
+
+### 🔌 **1. Spark & Storage Initialization**
+- Initializes a Spark session using the **Cosmos DB Spark Connector**.
+- Connects to **ADLS Gen2** using **shared key authentication** for secure, controlled access.
+
+---
+
+### 📥 **2. Raw Data Ingestion**
+Loads raw datasets from Cosmos DB containers:
+
+- **ATMTransactions**
+- **UPIEvents**
+- **AccountProfile**
+
+---
+
+### ✔️ **3. Data Validation**
+- Performs record-level validation using **row counts** on loaded DataFrames.
+- Ensures data completeness before processing.
+
+---
+
+### 🥈 **4. Silver Layer Transformation**
+Transforms raw data into clean, structured Silver tables by:
+
+- Renaming columns for consistency  
+- Classifying transactions (e.g.,  
+  - `"ATM_WITHDRAWAL"` → negative ATM amounts  
+  - `"UPI_PAYMENT"` → debit UPI transactions  
+)  
+- Casting columns to correct data types (timestamps, numeric fields, etc.)
+- Joining with customer profiles to **detect anomalies** such as mismatched geo-locations.
+- Flagging suspicious and fraudulent activity.
+
+---
+
+### 🥇 **5. Gold Layer Transformation**
+Standardizes and aggregates transformed data:
+
+- Unifies **ATM & UPI schemas** into common formats.
+- Generates:
+  - **FactTransactions** – enriched transaction-level fact table  
+  - **FactFraudDetection** – logs all fraud-flagged events  
+  - **FactCustomerActivity** – captures UPI customer behavior with derived activity types  
+
+---
+
+### 📦 **6. Optimized Storage Output**
+- Writes and **overwrites** transformed datasets as **Parquet files** into the ADLS Gold container.
+- Enables efficient querying for analytics and reporting workloads.
+
+---
+
 
 
 
