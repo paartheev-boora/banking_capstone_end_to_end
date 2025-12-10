@@ -66,8 +66,79 @@ Below is the screenshot showing messages in the `ingestionqueue` after uploading
 ## Done with it and got the results as expected.
 ### <img width="1919" height="852" alt="Screenshot 2025-12-06 102933" src="https://github.com/user-attachments/assets/f3c5ef79-636d-4842-82d5-d36b78ea5dea" />
 ## Started with 2nd day deliverables.
-### The Service Bus Queue Trigger function was successfully reading queues from Service Bus queue.
-### But the Function could not download the blob content using blob url from queue message.
-### It displayed a Authentication error 
-### for which I have decided to create a identity in Function App and create a role assignment in blob storage account using that identity.
-### Meanwhile, the cleanup has occured. And this stated actions were not only the part but also other errors from deployment as informed in the group.
+##### The Service Bus Queue Trigger function was successfully reading queues from Service Bus queue.
+##### But the Function could not download the blob content using blob url from queue message.
+##### It displayed a Authentication error 
+##### for which I have decided to create a identity in Function App and create a role assignment in blob storage account using that identity.
+##### Meanwhile, the cleanup has occured. And this stated actions were not only the part but also other errors from deployment as informed in the group.
+##### I have done it on local using a VM in a free account first then and figured out it's working with a blob_url as input and fetching data to cosmos DB. 
+##### Then, followed with role assignment.
+##### <img width="1580" height="768" alt="sample cosmos 2" src="https://github.com/user-attachments/assets/1baa48a6-868d-4de4-a66d-8daeada2a0b2" />
+##### <img width="853" height="666" alt="countof cosmos table" src="https://github.com/user-attachments/assets/3d2ea68b-10cd-4db0-9b32-40abb8d39157" />
+##### Then after ran the parthday2.ipynb notebook to fetch the data from cosmos DB to silver and gold containers.
+## 📌 2. Features Implemented
+
+---
+
+### ✅ **Schema Inference**
+
+Automatically infers:
+
+- **Required fields**
+- **Field types:** `string`, `number`, `timestamp`  
+  *(Derived from the first row of data)*
+
+---
+
+### ✅ **Row-Level Validation**
+
+Each record is validated to ensure:
+
+- No missing required fields  
+- Correct datatype  
+- Valid timestamps  
+- Numeric fields are valid  
+
+⚠️ **Invalid rows are skipped automatically.**
+
+---
+
+### ✅ **Transaction Classification**
+
+Adds a new field **`transaction_type`** based on description & amount.
+
+| Source | Classification |
+|--------|----------------|
+| **ATM** | WITHDRAWAL, DEPOSIT, OTHER |
+| **UPI** | PAYMENT, OTHER |
+
+---
+
+### ✅ **Suspicious Activity Detection**
+
+Two fraud-detection rules are implemented:
+
+---
+
+#### **1. High Value Transactions**
+
+- **ATM ≥ ₹20,000**  
+- **UPI ≥ ₹50,000**
+
+These trigger **`HIGH_VALUE`** alerts.
+
+---
+
+#### **2. Rapid ATM Withdrawals**
+
+Detects rapid withdrawal patterns:
+
+- **3+ withdrawals**  
+- **Within 5 minutes**  
+- **From the same account**
+
+---
+
+
+
+
