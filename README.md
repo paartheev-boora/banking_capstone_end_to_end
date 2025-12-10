@@ -212,6 +212,24 @@ Transforms raw data into clean, structured Silver tables by:
 #####  Unusual Location
 - Flags transactions where there is a **large geolocation jump** compared to the customer’s last known location.
   <img width="1906" height="810" alt="image" src="https://github.com/user-attachments/assets/bed521f3-ad35-4e92-9799-52d6951ed396" />
+#####  Enterprise Security with Firewall Integration  
+-  Block all public internet access to sensitive resources (SQL/Cosmos DB)
+  <img width="1603" height="700" alt="image" src="https://github.com/user-attachments/assets/b848612b-2e43-4405-b7f9-e08ab186f538" />
+-  Secure Databricks/Synapse workspaces via Azure Private Endpoints.
+  <img width="1851" height="847" alt="image" src="https://github.com/user-attachments/assets/26e128b9-9ba0-4651-915b-5c77ce01dc0a" />
+Can add client's IP to provide access securely.
+Or can also create a private endpoint.
+##### CI/CD Pipeline Setup
+-  Azure Functions
+-  Synapse  Notebooks in synapse analytics for daily data sync for customer data and account status
+   <img width="1239" height="918" alt="GithubToSynapseConn" src="https://github.com/user-attachments/assets/06fc3aee-89ae-4ea0-b8c4-72d8f3b8dbc9" />
+
+----
+
+## Day 5
+#### Visulaization
+ 
+  
   
 
 
