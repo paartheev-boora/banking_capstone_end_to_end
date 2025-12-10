@@ -193,6 +193,34 @@ Standardizes and aggregates transformed data:
 - Enables efficient querying for analytics and reporting workloads.
 
 ---
+## 📅 Day 3: Synapse DW Schema and ETL Setup
+
+---
+
+## 🧠 Code Approach
+
+### 🏗️ **1. Synapse Workspace & Dimensional Modeling**
+- Configures **Synapse SQL workspace** with scripts to create dimensional tables/views such as:  
+  - **DimCustomer**  
+  - **DimAccount**  
+  - **FactTransactions**  
+  - **FactFraudDetection**  
+  - **FactCustomerActivity**
+- Uses **OPENROWSET** and auto-generated SQL to bulk load data from ADLS Parquet into Synapse.
+
+---
+
+### 🚀 **2. PySpark Initialization for ETL**
+- Initializes **PySpark** in Synapse notebook.  
+- Connects to Cosmos DB using **Cosmos DB Spark connector**.  
+- Authenticates to ADLS Gen2 using **shared key** for secure data ingestion.
+
+---
+
+### 📥 **3. Raw Data Loading**
+- Loads source data directly from Cosmos DB collections, e.g.:  
+  ```python
+  atm_raw = spark.read.format("cosmos.oltp")...
 
 
 
